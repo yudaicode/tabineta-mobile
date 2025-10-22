@@ -1,0 +1,462 @@
+import React from 'react';
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Image,
+  TouchableOpacity,
+} from 'react-native';
+import { Text, ActivityIndicator, Divider } from 'react-native-paper';
+import { useLocalSearchParams, router } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import { format } from 'date-fns';
+import { ja } from 'date-fns/locale';
+import { Ionicons } from '@expo/vector-icons';
+import { fetchTripDetail } from '@/lib/api';
+import { useTripLike, useTripBookmark, useTripComments } from '@/hooks/useSocial';
+import { LikeButton } from '@/components/social/LikeButton';
+import { BookmarkButton } from '@/components/social/BookmarkButton';
+import { CommentForm } from '@/components/social/CommentForm';
+import { CommentList } from '@/components/social/CommentList';
+import { DaySchedule, Activity } from '@/types';
+
+export default function TripDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+
+  const { data: trip, isLoading } = useQuery({
+    queryKey: ['trip-detail', id],
+    queryFn: () => fetchTripDetail(id),
+    enabled: !!id,
+  });
+
+  const { comments, commentsCount, addComment, deleteComment, isLoading: commentsLoading } =
+    useTripComments(id);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  if (!trip) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>旅行プランが見つかりません</Text>
+      </View>
+    );
+  }
+
+  const startDate = new Date(trip.start_date);
+  const endDate = new Date(trip.end_date);
+  const duration =
+    Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  const daySchedules = (trip.day_schedules || []) as (DaySchedule & {
+    activities: Activity[];
+  })[];
+
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'activity':
+        return '<�';
+      case 'transport':
+        return '=�';
+      case 'meal':
+        return '<}';
+      case 'accommodation':
+        return '<�';
+      case 'shopping':
+        return '=�';
+      case 'sightseeing':
+        return '=�';
+      case 'meeting':
+        return '=�';
+      default:
+        return '=�';
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Header with Back Button */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#1E293B" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Cover Image */}
+        {trip.cover_image ? (
+          <Image source={{ uri: trip.cover_image }} style={styles.coverImage} />
+        ) : (
+          <View style={[styles.coverImage, styles.placeholderImage]}>
+            <Text style={styles.placeholderText}>=�</Text>
+          </View>
+        )}
+
+        {/* Main Content */}
+        <View style={styles.content}>
+          {/* Category Badge */}
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryText}>{trip.category}</Text>
+          </View>
+
+          {/* Title */}
+          <Text variant="headlineMedium" style={styles.title}>
+            {trip.title}
+          </Text>
+
+          {/* Meta Info */}
+          <View style={styles.metaContainer}>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaIcon}>=�</Text>
+              <Text style={styles.metaText}>{duration}�</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaIcon}>=e</Text>
+              <Text style={styles.metaText}>{trip.traveler_count}�</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaIcon}>=�</Text>
+              <Text style={styles.metaText}>
+                {format(startDate, 'M/d', { locale: ja })}  {format(endDate, 'M/d', { locale: ja })}
+              </Text>
+            </View>
+          </View>
+
+          {/* Social Buttons */}
+          <View style={styles.socialBar}>
+            <LikeButton tripScheduleId={id} />
+            <BookmarkButton tripScheduleId={id} />
+            <View style={styles.commentCount}>
+              <Ionicons name="chatbubble-outline" size={20} color="#64748B" />
+              <Text style={styles.commentCountText}>{commentsCount}</Text>
+            </View>
+          </View>
+
+          <Divider style={styles.divider} />
+
+          {/* Description */}
+          {trip.description && (
+            <>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                �
+              </Text>
+              <Text style={styles.description}>{trip.description}</Text>
+              <Divider style={styles.divider} />
+            </>
+          )}
+
+          {/* Schedule */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            ������
+          </Text>
+
+          {daySchedules.map((day) => (
+            <View key={day.id} style={styles.dayCard}>
+              <View style={styles.dayHeader}>
+                <Text style={styles.dayNumber}>Day {day.day_number}</Text>
+                <Text style={styles.dayDate}>
+                  {format(new Date(day.date), 'Md�(E)', { locale: ja })}
+                </Text>
+              </View>
+              {day.title && <Text style={styles.dayTitle}>{day.title}</Text>}
+
+              {/* Activities */}
+              {day.activities && day.activities.length > 0 && (
+                <View style={styles.activitiesContainer}>
+                  {day.activities.map((activity, index) => (
+                    <View key={activity.id} style={styles.activityItem}>
+                      <View style={styles.activityTimeContainer}>
+                        <Text style={styles.activityTime}>{activity.time}</Text>
+                      </View>
+                      <View style={styles.activityContent}>
+                        <View style={styles.activityHeader}>
+                          <Text style={styles.activityIcon}>
+                            {getActivityIcon(activity.type)}
+                          </Text>
+                          <Text style={styles.activityTitle}>{activity.title}</Text>
+                        </View>
+                        {activity.location && (
+                          <View style={styles.activityDetail}>
+                            <Ionicons name="location-outline" size={14} color="#64748B" />
+                            <Text style={styles.activityDetailText}>{activity.location}</Text>
+                          </View>
+                        )}
+                        {activity.description && (
+                          <Text style={styles.activityDescription}>
+                            {activity.description}
+                          </Text>
+                        )}
+                        {activity.cost && (
+                          <View style={styles.activityDetail}>
+                            <Text style={styles.activityCost}>�{activity.cost.toLocaleString()}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          ))}
+
+          <Divider style={styles.divider} />
+
+          {/* Comments Section */}
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            ���� ({commentsCount})
+          </Text>
+
+          <CommentForm
+            tripScheduleId={id}
+            onSubmit={(content) => addComment(content)}
+          />
+
+          <View style={styles.commentsContainer}>
+            <CommentList
+              comments={comments}
+              onDeleteComment={deleteComment}
+              isLoading={commentsLoading}
+            />
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 24,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#64748B',
+  },
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingTop: 48,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  coverImage: {
+    width: '100%',
+    height: 300,
+  },
+  placeholderImage: {
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  placeholderText: {
+    fontSize: 64,
+    opacity: 0.3,
+  },
+  content: {
+    padding: 20,
+  },
+  categoryBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  categoryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3B82F6',
+  },
+  title: {
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 16,
+    lineHeight: 32,
+  },
+  metaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 20,
+    marginBottom: 20,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metaIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  metaText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  socialBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  commentCount: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+  },
+  commentCountText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  divider: {
+    marginVertical: 20,
+    backgroundColor: '#E2E8F0',
+  },
+  sectionTitle: {
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 16,
+  },
+  description: {
+    fontSize: 15,
+    color: '#475569',
+    lineHeight: 24,
+  },
+  dayCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  dayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  dayNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#3B82F6',
+  },
+  dayDate: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  dayTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  activitiesContainer: {
+    gap: 12,
+  },
+  activityItem: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  activityTimeContainer: {
+    minWidth: 60,
+    paddingTop: 2,
+  },
+  activityTime: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  activityContent: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  activityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  activityIcon: {
+    fontSize: 16,
+  },
+  activityTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
+    flex: 1,
+  },
+  activityDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  activityDetailText: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  activityDescription: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  activityCost: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  commentsContainer: {
+    marginTop: 16,
+  },
+});
