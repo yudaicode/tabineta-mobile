@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { TripLike, TripComment, TripBookmark } from '@/types';
+import { TripComment } from '@/types';
 
 /**
  * いいね機能
@@ -79,6 +79,35 @@ export async function addComment(tripScheduleId: string, userId: string, content
     .single();
 
   if (error) throw error;
+
+  // 旅行記の作成者を取得して通知を作成
+  const { data: trip } = await supabase
+    .from('trip_schedules')
+    .select('user_id')
+    .eq('id', tripScheduleId)
+    .single();
+
+  if (trip && trip.user_id !== userId) {
+    // コメント者の情報を取得
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, username')
+      .eq('id', userId)
+      .single();
+
+    const commenterName = profile?.full_name || profile?.username || 'ユーザー';
+
+    // 通知を作成
+    await supabase.from('notifications').insert({
+      user_id: trip.user_id,
+      from_user_id: userId,
+      type: 'comment',
+      content: `${commenterName}さんがあなたの旅行記にコメントしました`,
+      trip_schedule_id: tripScheduleId,
+      is_read: false,
+    });
+  }
+
   return data as TripComment;
 }
 
@@ -97,6 +126,19 @@ export async function getTripComments(tripScheduleId: string) {
     `)
     .eq('trip_schedule_id', tripScheduleId)
     .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+// コメントを編集
+export async function updateComment(commentId: string, content: string) {
+  const { data, error } = await supabase
+    .from('trip_comments')
+    .update({ content, updated_at: new Date().toISOString() })
+    .eq('id', commentId)
+    .select()
+    .single();
 
   if (error) throw error;
   return data;
@@ -233,6 +275,26 @@ export async function toggleFollow(followerId: string, followingId: string) {
       });
 
     if (error) throw error;
+
+    // フォロワーの情報を取得
+    const { data: followerProfile } = await supabase
+      .from('profiles')
+      .select('full_name, username')
+      .eq('id', followerId)
+      .single();
+
+    const followerName = followerProfile?.full_name || followerProfile?.username || 'ユーザー';
+
+    // 通知を作成
+    await supabase.from('notifications').insert({
+      user_id: followingId,
+      from_user_id: followerId,
+      type: 'follow',
+      content: `${followerName}さんがあなたをフォローしました`,
+      trip_schedule_id: null,
+      is_read: false,
+    });
+
     return { following: true };
   }
 }
@@ -320,4 +382,32 @@ export async function getUserTotalComments(userId: string) {
 
   if (error) throw error;
   return count || 0;
+}
+
+// ユーザーがいいねした旅行記一覧を取得
+export async function getUserLikedTrips(userId: string) {
+  const { data, error } = await supabase
+    .from('trip_likes')
+    .select(`
+      *,
+      trip_schedule:trip_schedule_id (
+        id,
+        user_id,
+        title,
+        description,
+        start_date,
+        end_date,
+        cover_image,
+        category,
+        traveler_count,
+        is_public,
+        created_at,
+        updated_at
+      )
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
 }

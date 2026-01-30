@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   toggleTripLike,
@@ -5,6 +6,7 @@ import {
   checkUserLiked,
   addComment,
   getTripComments,
+  updateComment,
   deleteComment,
   getTripCommentsCount,
   toggleBookmark,
@@ -16,7 +18,9 @@ import {
   checkUserFollowing,
   getUserTotalLikes,
   getUserTotalComments,
+  getUserLikedTrips,
 } from '@/lib/social';
+import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/authStore';
 import Toast from 'react-native-toast-message';
 
@@ -60,6 +64,33 @@ export function useTripLike(tripScheduleId: string) {
       });
     },
   });
+
+  // リアルタイム更新を購読
+  useEffect(() => {
+    const channel = supabase
+      .channel(`trip-likes:${tripScheduleId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trip_likes',
+          filter: `trip_schedule_id=eq.${tripScheduleId}`,
+        },
+        (payload) => {
+          // いいね数とステータスを再取得
+          queryClient.invalidateQueries({ queryKey: ['trip-likes-count', tripScheduleId] });
+          if (user?.id) {
+            queryClient.invalidateQueries({ queryKey: ['trip-like', tripScheduleId, user.id] });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tripScheduleId, user?.id, queryClient]);
 
   return {
     isLiked: isLiked || false,
@@ -109,6 +140,25 @@ export function useTripComments(tripScheduleId: string) {
     },
   });
 
+  const updateCommentMutation = useMutation({
+    mutationFn: ({ commentId, content }: { commentId: string; content: string }) =>
+      updateComment(commentId, content),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trip-comments', tripScheduleId] });
+      Toast.show({
+        type: 'success',
+        text1: 'コメントを更新しました',
+      });
+    },
+    onError: (error: any) => {
+      Toast.show({
+        type: 'error',
+        text1: 'エラー',
+        text2: error.message,
+      });
+    },
+  });
+
   const deleteCommentMutation = useMutation({
     mutationFn: (commentId: string) => deleteComment(commentId),
     onSuccess: () => {
@@ -128,10 +178,36 @@ export function useTripComments(tripScheduleId: string) {
     },
   });
 
+  // リアルタイム更新を購読
+  useEffect(() => {
+    const channel = supabase
+      .channel(`trip-comments:${tripScheduleId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trip_comments',
+          filter: `trip_schedule_id=eq.${tripScheduleId}`,
+        },
+        (payload) => {
+          // コメント一覧とカウントを再取得
+          queryClient.invalidateQueries({ queryKey: ['trip-comments', tripScheduleId] });
+          queryClient.invalidateQueries({ queryKey: ['trip-comments-count', tripScheduleId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tripScheduleId, queryClient]);
+
   return {
     comments: comments || [],
     commentsCount: commentsCount || 0,
     addComment: addCommentMutation.mutate,
+    updateComment: updateCommentMutation.mutate,
     deleteComment: deleteCommentMutation.mutate,
     isLoading,
   };
@@ -271,4 +347,15 @@ export function useUserStats(userId: string) {
     totalLikes: totalLikes || 0,
     totalComments: totalComments || 0,
   };
+}
+
+/**
+ * ユーザーがいいねした旅行記一覧を取得
+ */
+export function useUserLikedTrips(userId: string) {
+  return useQuery({
+    queryKey: ['user-liked-trips', userId],
+    queryFn: () => getUserLikedTrips(userId),
+    enabled: !!userId,
+  });
 }

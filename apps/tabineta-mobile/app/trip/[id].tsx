@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   ScrollView,
   StyleSheet,
   Image,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Text, ActivityIndicator, Divider } from 'react-native-paper';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -14,15 +15,27 @@ import { ja } from 'date-fns/locale';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchTripDetail } from '@/lib/api';
 import { useTripLike, useTripBookmark, useTripComments } from '@/hooks/useSocial';
+import { useCopyTripSchedule, useDeleteTrip, useUpdateActivity, useReorderActivities } from '@/hooks/useTrips';
+import { useAuthStore } from '@/stores/authStore';
 import { LikeButton } from '@/components/social/LikeButton';
 import { BookmarkButton } from '@/components/social/BookmarkButton';
 import { CommentForm } from '@/components/social/CommentForm';
 import { CommentList } from '@/components/social/CommentList';
+import { ActivityFormModal } from '@/components/trip/ActivityFormModal';
 import { DaySchedule, Activity } from '@/types';
 import { Colors, Spacing, BorderRadius, Shadows, Typography, IconSizes } from '@/constants/theme';
+import Toast from 'react-native-toast-message';
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuthStore();
+  const copyTrip = useCopyTripSchedule();
+  const deleteTrip = useDeleteTrip();
+  const updateActivity = useUpdateActivity();
+  const reorderActivities = useReorderActivities();
+
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
 
   const { data: trip, isLoading } = useQuery({
     queryKey: ['trip-detail', id],
@@ -30,7 +43,7 @@ export default function TripDetailScreen() {
     enabled: !!id,
   });
 
-  const { comments, commentsCount, addComment, deleteComment, isLoading: commentsLoading } =
+  const { comments, commentsCount, addComment, updateComment, deleteComment, isLoading: commentsLoading } =
     useTripComments(id);
 
   if (isLoading) {
@@ -101,10 +114,127 @@ export default function TripDetailScreen() {
     }
   };
 
+  const handleCopyTrip = async () => {
+    if (!user?.id) {
+      Toast.show({
+        type: 'error',
+        text1: 'ログインが必要です',
+        text2: 'ログインしてからコピーしてください',
+      });
+      return;
+    }
+
+    try {
+      await copyTrip.mutateAsync({
+        tripScheduleId: id,
+        userId: user.id,
+      });
+      // 成功メッセージはフック内で表示される
+    } catch (error: any) {
+      // エラーメッセージもフック内で表示される
+      console.error('Copy error:', error);
+    }
+  };
+
+  const handleEditTrip = () => {
+    router.push(`/trip/edit/${id}`);
+  };
+
+  const handleDeleteTrip = () => {
+    Alert.alert(
+      '旅行プランを削除',
+      'この旅行プランを削除してもよろしいですか？この操作は取り消せません。',
+      [
+        {
+          text: 'キャンセル',
+          style: 'cancel',
+        },
+        {
+          text: '削除',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteTrip.mutateAsync(id);
+              Toast.show({
+                type: 'success',
+                text1: '削除しました',
+                text2: '旅行プランを削除しました',
+              });
+              router.back();
+            } catch (error: any) {
+              Toast.show({
+                type: 'error',
+                text1: '削除に失敗しました',
+                text2: error.message,
+              });
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEditActivity = (activity: Activity) => {
+    setSelectedActivity(activity);
+    setEditModalVisible(true);
+  };
+
+  const handleUpdateActivity = async (activityData: {
+    time: string;
+    title: string;
+    type: string;
+    location: string | null;
+    description: string | null;
+    duration: string | null;
+    cost: number | null;
+  }) => {
+    if (!selectedActivity) return;
+
+    try {
+      await updateActivity.mutateAsync({
+        activityId: selectedActivity.id,
+        tripScheduleId: id,
+        data: activityData,
+      });
+      setEditModalVisible(false);
+      setSelectedActivity(null);
+    } catch (error: any) {
+      // Error handling is done in the hook
+      console.error('Update activity error:', error);
+    }
+  };
+
+  const handleMoveActivity = (daySchedule: DaySchedule & { activities: Activity[] }, activityIndex: number, direction: 'up' | 'down') => {
+    const activities = [...daySchedule.activities];
+
+    if (direction === 'up' && activityIndex > 0) {
+      // Swap with previous activity
+      [activities[activityIndex - 1], activities[activityIndex]] = [activities[activityIndex], activities[activityIndex - 1]];
+    } else if (direction === 'down' && activityIndex < activities.length - 1) {
+      // Swap with next activity
+      [activities[activityIndex], activities[activityIndex + 1]] = [activities[activityIndex + 1], activities[activityIndex]];
+    } else {
+      return; // Cannot move
+    }
+
+    // Get the activity IDs in the new order
+    const activityIds = activities.map(a => a.id);
+
+    // Call the reorder mutation
+    reorderActivities.mutate({
+      dayScheduleId: daySchedule.id,
+      tripScheduleId: id,
+      activityIds,
+    });
+  };
+
+  // 自分の投稿かどうかを判定
+  const isOwnTrip = trip && user && trip.user_id === user.id;
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header with Back Button */}
+        {/* Header with Back Button and Actions */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -113,6 +243,30 @@ export default function TripDetailScreen() {
           >
             <Ionicons name="arrow-back" size={IconSizes.md} color={Colors.text.primary} />
           </TouchableOpacity>
+
+          {isOwnTrip && (
+            <View style={styles.headerActions}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={handleEditTrip}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="create-outline" size={IconSizes.md} color={Colors.text.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deleteButton]}
+                onPress={handleDeleteTrip}
+                activeOpacity={0.7}
+                disabled={deleteTrip.isPending}
+              >
+                <Ionicons
+                  name={deleteTrip.isPending ? "hourglass-outline" : "trash-outline"}
+                  size={IconSizes.md}
+                  color={Colors.error[600]}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Cover Image */}
@@ -136,6 +290,32 @@ export default function TripDetailScreen() {
           <Text variant="headlineMedium" style={styles.title}>
             {trip.title}
           </Text>
+
+          {/* User Info */}
+          {trip.profiles && (
+            <TouchableOpacity
+              style={styles.userInfo}
+              onPress={() => router.push(`/user/${trip.user_id}`)}
+              activeOpacity={0.7}
+            >
+              {trip.profiles.avatar_url ? (
+                <Image source={{ uri: trip.profiles.avatar_url }} style={styles.userAvatar} />
+              ) : (
+                <View style={styles.userAvatarPlaceholder}>
+                  <Ionicons name="person" size={16} color={Colors.text.inverse} />
+                </View>
+              )}
+              <View style={styles.userTextContainer}>
+                <Text style={styles.userFullName}>
+                  {trip.profiles.full_name || trip.profiles.username || 'ユーザー'}
+                </Text>
+                {trip.profiles.username && (
+                  <Text style={styles.username}>@{trip.profiles.username}</Text>
+                )}
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={Colors.text.tertiary} />
+            </TouchableOpacity>
+          )}
 
           {/* Meta Info */}
           <View style={styles.metaContainer}>
@@ -163,6 +343,22 @@ export default function TripDetailScreen() {
               <Ionicons name="chatbubble-outline" size={IconSizes.sm} color={Colors.text.tertiary} />
               <Text style={styles.commentCountText}>{commentsCount}</Text>
             </View>
+            <View style={styles.spacer} />
+            <TouchableOpacity
+              style={styles.copyButton}
+              onPress={handleCopyTrip}
+              disabled={copyTrip.isPending}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={copyTrip.isPending ? 'hourglass-outline' : 'copy-outline'}
+                size={IconSizes.sm}
+                color={Colors.primary[600]}
+              />
+              <Text style={styles.copyButtonText}>
+                {copyTrip.isPending ? 'コピー中...' : 'プランをコピー'}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <Divider style={styles.divider} />
@@ -219,6 +415,49 @@ export default function TripDetailScreen() {
                             />
                           </View>
                           <Text style={styles.activityTitle}>{activity.title}</Text>
+                          {isOwnTrip && (
+                            <View style={styles.activityActions}>
+                              {day.activities.length > 1 && (
+                                <View style={styles.activityReorderButtons}>
+                                  <TouchableOpacity
+                                    style={[styles.activityReorderButton, index === 0 && styles.activityReorderButtonDisabled]}
+                                    onPress={() => handleMoveActivity(day, index, 'up')}
+                                    disabled={index === 0}
+                                    activeOpacity={0.7}
+                                  >
+                                    <Ionicons
+                                      name="chevron-up-outline"
+                                      size={16}
+                                      color={index === 0 ? Colors.neutral[400] : Colors.neutral[600]}
+                                    />
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={[styles.activityReorderButton, index === day.activities.length - 1 && styles.activityReorderButtonDisabled]}
+                                    onPress={() => handleMoveActivity(day, index, 'down')}
+                                    disabled={index === day.activities.length - 1}
+                                    activeOpacity={0.7}
+                                  >
+                                    <Ionicons
+                                      name="chevron-down-outline"
+                                      size={16}
+                                      color={index === day.activities.length - 1 ? Colors.neutral[400] : Colors.neutral[600]}
+                                    />
+                                  </TouchableOpacity>
+                                </View>
+                              )}
+                              <TouchableOpacity
+                                style={styles.activityEditButton}
+                                onPress={() => handleEditActivity(activity)}
+                                activeOpacity={0.7}
+                              >
+                                <Ionicons
+                                  name="create-outline"
+                                  size={IconSizes.sm}
+                                  color={Colors.primary[600]}
+                                />
+                              </TouchableOpacity>
+                            </View>
+                          )}
                         </View>
                         {activity.location && (
                           <View style={styles.activityDetail}>
@@ -230,6 +469,21 @@ export default function TripDetailScreen() {
                           <Text style={styles.activityDescription}>
                             {activity.description}
                           </Text>
+                        )}
+                        {activity.images && activity.images.length > 0 && (
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.activityImagesScroll}
+                          >
+                            {activity.images.map((imageUrl, imgIndex) => (
+                              <Image
+                                key={imgIndex}
+                                source={{ uri: imageUrl }}
+                                style={styles.activityImage}
+                              />
+                            ))}
+                          </ScrollView>
                         )}
                         {activity.cost && (
                           <View style={styles.activityCostContainer}>
@@ -263,12 +517,32 @@ export default function TripDetailScreen() {
           <View style={styles.commentsContainer}>
             <CommentList
               comments={comments}
+              onEditComment={(commentId, content) => updateComment({ commentId, content })}
               onDeleteComment={deleteComment}
               isLoading={commentsLoading}
             />
           </View>
         </View>
       </ScrollView>
+
+      {/* Activity Edit Modal */}
+      <ActivityFormModal
+        visible={editModalVisible}
+        onDismiss={() => {
+          setEditModalVisible(false);
+          setSelectedActivity(null);
+        }}
+        onSubmit={handleUpdateActivity}
+        initialData={selectedActivity ? {
+          time: selectedActivity.time,
+          title: selectedActivity.title,
+          type: selectedActivity.type,
+          location: selectedActivity.location || '',
+          description: selectedActivity.description || '',
+          duration: selectedActivity.duration || '',
+          cost: selectedActivity.cost || null,
+        } : undefined}
+      />
     </View>
   );
 }
@@ -318,6 +592,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...Shadows.md,
   },
+  headerActions: {
+    position: 'absolute',
+    right: 0,
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  actionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...Shadows.md,
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(254, 226, 226, 0.95)',
+  },
   coverImage: {
     width: '100%',
     height: 300,
@@ -352,6 +644,42 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     lineHeight: Typography.fontSize['3xl'] * Typography.lineHeight.tight,
   },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    backgroundColor: Colors.background.secondary,
+    borderRadius: BorderRadius.lg,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+  },
+  userAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.full,
+  },
+  userAvatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.primary[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userTextContainer: {
+    flex: 1,
+  },
+  userFullName: {
+    fontSize: Typography.fontSize.sm,
+    fontWeight: Typography.fontWeight.semibold,
+    color: Colors.text.primary,
+  },
+  username: {
+    fontSize: Typography.fontSize.xs,
+    color: Colors.text.secondary,
+  },
   metaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -385,6 +713,25 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.sm,
     color: Colors.text.tertiary,
     fontWeight: Typography.fontWeight.medium,
+  },
+  spacer: {
+    flex: 1,
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.primary[50],
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 1,
+    borderColor: Colors.primary[200],
+  },
+  copyButtonText: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.primary[700],
+    fontWeight: Typography.fontWeight.semibold,
   },
   divider: {
     marginVertical: Spacing.xl,
@@ -484,6 +831,36 @@ const styles = StyleSheet.create({
     fontWeight: Typography.fontWeight.semibold,
     color: Colors.text.primary,
   },
+  activityActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  activityReorderButtons: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  activityReorderButton: {
+    width: 24,
+    height: 24,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.neutral[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activityReorderButtonDisabled: {
+    opacity: 0.3,
+  },
+  activityEditButton: {
+    width: 32,
+    height: 32,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.primary[50],
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.primary[200],
+  },
   activityDetail: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -499,6 +876,16 @@ const styles = StyleSheet.create({
     color: Colors.text.secondary,
     marginTop: Spacing.sm,
     lineHeight: Typography.fontSize.sm * Typography.lineHeight.normal,
+  },
+  activityImagesScroll: {
+    marginTop: Spacing.sm,
+  },
+  activityImage: {
+    width: 120,
+    height: 120,
+    borderRadius: BorderRadius.md,
+    marginRight: Spacing.sm,
+    backgroundColor: Colors.neutral[200],
   },
   activityCostContainer: {
     flexDirection: 'row',

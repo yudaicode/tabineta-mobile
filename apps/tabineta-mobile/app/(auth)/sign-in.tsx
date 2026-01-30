@@ -1,53 +1,16 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Text } from 'react-native-paper';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { signInWithEmail, signInWithGoogle } from '@/lib/auth';
-import { Button } from '@/components/common/Button';
-import { Input } from '@/components/common/Input';
+import { signInWithGoogle } from '@/lib/auth';
 import Toast from 'react-native-toast-message';
 import { Colors, Spacing, BorderRadius, Shadows, Typography, IconSizes } from '@/constants/theme';
 
 export default function SignInScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-
-  const handleSignIn = async () => {
-    if (!email || !password) {
-      Toast.show({
-        type: 'error',
-        text1: 'エラー',
-        text2: 'メールアドレスとパスワードを入力してください',
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const { error } = await signInWithEmail(email, password);
-
-      if (error) throw error;
-
-      Toast.show({
-        type: 'success',
-        text1: 'ログイン成功',
-      });
-
-      // マイページに遷移
-      router.replace('/(tabs)/profile');
-    } catch (error: any) {
-      Toast.show({
-        type: 'error',
-        text1: 'ログインエラー',
-        text2: error.message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [lineLoading, setLineLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -80,15 +43,48 @@ export default function SignInScreen() {
     }
   };
 
-  const handleSignUp = () => {
-    router.push('/(auth)/sign-up');
+  const handleAppleSignIn = async () => {
+    setAppleLoading(true);
+    try {
+      // TODO: Apple Sign-In を実装
+      Toast.show({
+        type: 'info',
+        text1: '準備中',
+        text2: 'Apple Sign-In は現在準備中です',
+      });
+    } catch (error: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Apple ログインエラー',
+        text2: error.message || '認証に失敗しました',
+      });
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
+  const handleLineSignIn = async () => {
+    setLineLoading(true);
+    try {
+      // TODO: LINE Login を実装
+      Toast.show({
+        type: 'info',
+        text1: '準備中',
+        text2: 'LINE Login は現在準備中です',
+      });
+    } catch (error: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'LINE ログインエラー',
+        text2: error.message || '認証に失敗しました',
+      });
+    } finally {
+      setLineLoading(false);
+    }
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
+    <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
@@ -103,54 +99,11 @@ export default function SignInScreen() {
           </Text>
         </View>
 
-        {/* Form */}
+        {/* OAuth Buttons */}
         <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={IconSizes.sm} color={Colors.text.tertiary} style={styles.inputIcon} />
-            <Input
-              label="メールアドレス"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="email@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.input}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={IconSizes.sm} color={Colors.text.tertiary} style={styles.inputIcon} />
-            <Input
-              label="パスワード"
-              value={password}
-              onChangeText={setPassword}
-              placeholder="6文字以上"
-              secureTextEntry
-              style={styles.input}
-            />
-          </View>
-
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={handleSignIn}
-            disabled={loading}
-            activeOpacity={0.7}
-          >
-            {loading ? (
-              <Text style={styles.loginButtonText}>ログイン中...</Text>
-            ) : (
-              <>
-                <Ionicons name="log-in-outline" size={IconSizes.sm} color={Colors.text.inverse} />
-                <Text style={styles.loginButtonText}>ログイン</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text variant="bodyMedium" style={styles.dividerText}>または</Text>
-            <View style={styles.dividerLine} />
-          </View>
+          <Text variant="titleMedium" style={styles.welcomeText}>
+            ログインして始めよう
+          </Text>
 
           <TouchableOpacity
             style={styles.googleButton}
@@ -162,23 +115,52 @@ export default function SignInScreen() {
               <Text style={styles.googleButtonText}>認証中...</Text>
             ) : (
               <>
-                <Ionicons name="logo-google" size={IconSizes.sm} color={Colors.text.primary} />
+                <Ionicons name="logo-google" size={IconSizes.md} color={Colors.text.primary} />
                 <Text style={styles.googleButtonText}>Google でログイン</Text>
               </>
             )}
           </TouchableOpacity>
 
-          <View style={styles.signUpContainer}>
-            <Text variant="bodyMedium" style={styles.signUpText}>
-              アカウントをお持ちでない方
+          <TouchableOpacity
+            style={styles.appleButton}
+            onPress={handleAppleSignIn}
+            disabled={appleLoading}
+            activeOpacity={0.7}
+          >
+            {appleLoading ? (
+              <Text style={styles.appleButtonText}>認証中...</Text>
+            ) : (
+              <>
+                <Ionicons name="logo-apple" size={IconSizes.md} color={Colors.text.inverse} />
+                <Text style={styles.appleButtonText}>Apple でログイン</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.lineButton}
+            onPress={handleLineSignIn}
+            disabled={lineLoading}
+            activeOpacity={0.7}
+          >
+            {lineLoading ? (
+              <Text style={styles.lineButtonText}>認証中...</Text>
+            ) : (
+              <>
+                <Ionicons name="chatbubble" size={IconSizes.md} color={Colors.text.inverse} />
+                <Text style={styles.lineButtonText}>LINE でログイン</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.privacyNote}>
+            <Text variant="bodySmall" style={styles.privacyText}>
+              ログインすることで、利用規約とプライバシーポリシーに同意したものとみなされます。
             </Text>
-            <TouchableOpacity onPress={handleSignUp} activeOpacity={0.7}>
-              <Text style={styles.signUpLink}>新規登録</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -213,6 +195,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: Colors.text.secondary,
+    textAlign: 'center',
   },
   form: {
     width: '100%',
@@ -222,79 +205,68 @@ const styles = StyleSheet.create({
     ...Shadows.lg,
     borderWidth: 1,
     borderColor: Colors.border.light,
+    gap: Spacing.lg,
   },
-  inputContainer: {
-    position: 'relative',
-    marginBottom: Spacing.lg,
-  },
-  inputIcon: {
-    position: 'absolute',
-    left: Spacing.md,
-    top: 38,
-    zIndex: 1,
-  },
-  input: {
-    paddingLeft: Spacing['4xl'],
-  },
-  loginButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.primary[500],
-    paddingVertical: Spacing.lg,
-    borderRadius: BorderRadius.lg,
-    marginTop: Spacing.lg,
-    ...Shadows.md,
-  },
-  loginButtonText: {
-    fontSize: Typography.fontSize.base,
+  welcomeText: {
+    textAlign: 'center',
+    color: Colors.text.primary,
     fontWeight: Typography.fontWeight.semibold,
-    color: Colors.text.inverse,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: Spacing.xl,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: Colors.border.medium,
-  },
-  dividerText: {
-    marginHorizontal: Spacing.lg,
-    color: Colors.text.tertiary,
+    marginBottom: Spacing.md,
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
     backgroundColor: Colors.background.primary,
     paddingVertical: Spacing.lg,
     borderRadius: BorderRadius.lg,
     borderWidth: 1.5,
     borderColor: Colors.border.dark,
+    ...Shadows.sm,
   },
   googleButtonText: {
     fontSize: Typography.fontSize.base,
     fontWeight: Typography.fontWeight.semibold,
     color: Colors.text.primary,
   },
-  signUpContainer: {
+  appleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing['2xl'],
-    gap: Spacing.xs,
+    gap: Spacing.md,
+    backgroundColor: '#000000',
+    paddingVertical: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    ...Shadows.sm,
   },
-  signUpText: {
-    color: Colors.text.secondary,
-  },
-  signUpLink: {
+  appleButtonText: {
     fontSize: Typography.fontSize.base,
     fontWeight: Typography.fontWeight.semibold,
-    color: Colors.primary[600],
+    color: Colors.text.inverse,
+  },
+  lineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.md,
+    backgroundColor: '#00B900',
+    paddingVertical: Spacing.lg,
+    borderRadius: BorderRadius.lg,
+    ...Shadows.sm,
+  },
+  lineButtonText: {
+    fontSize: Typography.fontSize.base,
+    fontWeight: Typography.fontWeight.semibold,
+    color: Colors.text.inverse,
+  },
+  privacyNote: {
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.sm,
+  },
+  privacyText: {
+    textAlign: 'center',
+    color: Colors.text.tertiary,
+    lineHeight: Typography.fontSize.sm * Typography.lineHeight.relaxed,
   },
 });

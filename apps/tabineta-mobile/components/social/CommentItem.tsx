@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, Avatar, IconButton, Menu } from 'react-native-paper';
+import { Text, Avatar, IconButton, Menu, TextInput, Button } from 'react-native-paper';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useAuthStore } from '@/stores/authStore';
@@ -17,13 +17,34 @@ interface CommentItemProps {
       avatar_url: string | null;
     };
   };
+  onEdit?: (commentId: string, content: string) => void;
   onDelete?: (commentId: string) => void;
 }
 
-export function CommentItem({ comment, onDelete }: CommentItemProps) {
+export function CommentItem({ comment, onEdit, onDelete }: CommentItemProps) {
   const { user } = useAuthStore();
   const [menuVisible, setMenuVisible] = React.useState(false);
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [editedContent, setEditedContent] = React.useState(comment.content);
   const isOwnComment = user?.id === comment.user.id;
+
+  const handleEdit = () => {
+    setMenuVisible(false);
+    setIsEditing(true);
+    setEditedContent(comment.content);
+  };
+
+  const handleSaveEdit = () => {
+    if (onEdit && editedContent.trim()) {
+      onEdit(comment.id, editedContent.trim());
+      setIsEditing(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedContent(comment.content);
+  };
 
   const handleDelete = () => {
     setMenuVisible(false);
@@ -65,7 +86,7 @@ export function CommentItem({ comment, onDelete }: CommentItemProps) {
               })}
             </Text>
           </View>
-          {isOwnComment && onDelete && (
+          {isOwnComment && (onEdit || onDelete) && !isEditing && (
             <Menu
               visible={menuVisible}
               onDismiss={() => setMenuVisible(false)}
@@ -77,11 +98,39 @@ export function CommentItem({ comment, onDelete }: CommentItemProps) {
                 />
               }
             >
-              <Menu.Item onPress={handleDelete} title="削除" />
+              {onEdit && <Menu.Item onPress={handleEdit} title="編集" leadingIcon="pencil" />}
+              {onDelete && <Menu.Item onPress={handleDelete} title="削除" leadingIcon="delete" />}
             </Menu>
           )}
         </View>
-        <Text style={styles.commentText}>{comment.content}</Text>
+        {isEditing ? (
+          <View style={styles.editContainer}>
+            <TextInput
+              mode="outlined"
+              value={editedContent}
+              onChangeText={setEditedContent}
+              multiline
+              numberOfLines={3}
+              style={styles.editInput}
+              autoFocus
+            />
+            <View style={styles.editButtons}>
+              <Button mode="outlined" onPress={handleCancelEdit} style={styles.editButton}>
+                キャンセル
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleSaveEdit}
+                style={styles.editButton}
+                disabled={!editedContent.trim()}
+              >
+                保存
+              </Button>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.commentText}>{comment.content}</Text>
+        )}
       </View>
     </View>
   );
@@ -120,5 +169,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#374151',
     lineHeight: 20,
+  },
+  editContainer: {
+    marginTop: 8,
+  },
+  editInput: {
+    backgroundColor: '#FFFFFF',
+    marginBottom: 8,
+  },
+  editButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  editButton: {
+    minWidth: 80,
   },
 });

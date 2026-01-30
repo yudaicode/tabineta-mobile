@@ -1,121 +1,81 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Image } from 'react-native';
 import { Text, Button } from 'react-native-paper';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/authStore';
 import { useTrips } from '@/hooks/useTrips';
-import { useUserStats, useUserBookmarks, useUserLikedTrips, useUserFollow } from '@/hooks/useSocial';
+import { useUserStats, useUserLikedTrips, useUserFollow } from '@/hooks/useSocial';
 import { useProfile } from '@/hooks/useProfile';
 import { TripCard } from '@/components/trip/TripCard';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { Colors, Spacing, BorderRadius, Shadows, Typography, IconSizes } from '@/constants/theme';
 
-type TabType = 'posts' | 'bookmarks' | 'likes';
+type TabType = 'posts' | 'likes';
 
-export default function ProfileScreen() {
-  const { user, signOut } = useAuthStore();
+export default function UserProfileScreen() {
+  const { id: userId } = useLocalSearchParams<{ id: string }>();
+  const { user: currentUser } = useAuthStore();
   const [selectedTab, setSelectedTab] = useState<TabType>('posts');
-  const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useProfile(user?.id || '');
-  const { data: myTrips, isLoading: tripsLoading, refetch: refetchTrips } = useTrips({
-    userId: user?.id,
+
+  const { data: profile, isLoading: profileLoading, refetch: refetchProfile } = useProfile(userId || '');
+  const { data: userTrips, isLoading: tripsLoading, refetch: refetchTrips } = useTrips({
+    userId: userId,
   });
-  const { data: bookmarksData, isLoading: bookmarksLoading, refetch: refetchBookmarks } =
-    useUserBookmarks(user?.id || '');
   const { data: likedTripsData, isLoading: likedLoading, refetch: refetchLiked } =
-    useUserLikedTrips(user?.id || '');
-  const { totalLikes, totalComments } = useUserStats(user?.id || '');
-  const { followersCount, followingCount } = useUserFollow(user?.id || '');
+    useUserLikedTrips(userId || '');
+  const { totalLikes, totalComments } = useUserStats(userId || '');
+  const { isFollowing, followersCount, followingCount, toggleFollow, isLoading: followLoading } =
+    useUserFollow(userId || '');
   const [refreshing, setRefreshing] = React.useState(false);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refetchProfile(), refetchTrips(), refetchBookmarks(), refetchLiked()]);
+    await Promise.all([refetchProfile(), refetchTrips(), refetchLiked()]);
     setRefreshing(false);
   };
 
-  const handleLogout = async () => {
-    await signOut();
-  };
-
-  const handleLogin = () => {
-    router.push('/(auth)/sign-in');
-  };
-
-  const bookmarks = bookmarksData?.map((b: any) => b.trip_schedule).filter(Boolean) || [];
   const likedTrips = likedTripsData?.map((l: any) => l.trip_schedule).filter(Boolean) || [];
 
-  // 未認証時の表示
-  if (!user) {
+  // 自分のプロフィールの場合はプロフィール画面にリダイレクト
+  React.useEffect(() => {
+    if (currentUser?.id === userId) {
+      router.replace('/(tabs)/profile');
+    }
+  }, [currentUser, userId]);
+
+  // ローディング中
+  if (profileLoading) {
+    return <LoadingSpinner message="読み込み中..." />;
+  }
+
+  // ユーザーが見つからない場合
+  if (!profile) {
     return (
-      <ScrollView style={styles.container}>
-        <View style={styles.unauthContent}>
-          <View style={styles.loginPrompt}>
-            <View style={styles.loginIconContainer}>
-              <Ionicons name="airplane-outline" size={64} color={Colors.primary[500]} />
-            </View>
-            <Text variant="headlineMedium" style={styles.loginTitle}>
-              Tabinetaへようこそ
-            </Text>
-            <Text variant="bodyLarge" style={styles.loginSubtitle}>
-              ログインして旅の思い出を記録・共有しましょう
-            </Text>
-
-            <View style={styles.features}>
-              <View style={styles.featureItem}>
-                <View style={styles.featureIconContainer}>
-                  <Ionicons name="map-outline" size={IconSizes.md} color={Colors.primary[600]} />
-                </View>
-                <View style={styles.featureTextContainer}>
-                  <Text style={styles.featureTitle}>旅行プランを作成</Text>
-                  <Text style={styles.featureDescription}>詳細なスケジュールを管理</Text>
-                </View>
-              </View>
-              <View style={styles.featureItem}>
-                <View style={styles.featureIconContainer}>
-                  <Ionicons name="chatbubbles-outline" size={IconSizes.md} color={Colors.primary[600]} />
-                </View>
-                <View style={styles.featureTextContainer}>
-                  <Text style={styles.featureTitle}>他の旅行者と交流</Text>
-                  <Text style={styles.featureDescription}>コメントやいいねで繋がる</Text>
-                </View>
-              </View>
-              <View style={styles.featureItem}>
-                <View style={styles.featureIconContainer}>
-                  <Ionicons name="bookmark-outline" size={IconSizes.md} color={Colors.primary[600]} />
-                </View>
-                <View style={styles.featureTextContainer}>
-                  <Text style={styles.featureTitle}>お気に入りを保存</Text>
-                  <Text style={styles.featureDescription}>気になるプランをブックマーク</Text>
-                </View>
-              </View>
-            </View>
-
-            <Button
-              mode="contained"
-              onPress={handleLogin}
-              style={styles.loginButton}
-              contentStyle={styles.loginButtonContent}
-              labelStyle={styles.loginButtonLabel}
-            >
-              ログイン / 新規登録
-            </Button>
-          </View>
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="person-outline" size={64} color={Colors.neutral[300]} />
+          <Text variant="titleLarge" style={styles.errorTitle}>
+            ユーザーが見つかりません
+          </Text>
+          <Text variant="bodyMedium" style={styles.errorSubtitle}>
+            このユーザーは存在しないか、削除された可能性があります
+          </Text>
+          <Button
+            mode="contained"
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
+            戻る
+          </Button>
         </View>
-      </ScrollView>
+      </View>
     );
   }
 
   const renderContent = () => {
-    const isLoading =
-      selectedTab === 'posts'
-        ? tripsLoading
-        : selectedTab === 'bookmarks'
-        ? bookmarksLoading
-        : likedLoading;
-
-    const trips =
-      selectedTab === 'posts' ? myTrips : selectedTab === 'bookmarks' ? bookmarks : likedTrips;
+    const isLoading = selectedTab === 'posts' ? tripsLoading : likedLoading;
+    const trips = selectedTab === 'posts' ? userTrips : likedTrips;
 
     if (isLoading) {
       return <LoadingSpinner message="読み込み中..." />;
@@ -125,29 +85,17 @@ export default function ProfileScreen() {
       return (
         <View style={styles.emptyState}>
           <Ionicons
-            name={
-              selectedTab === 'posts'
-                ? 'map-outline'
-                : selectedTab === 'bookmarks'
-                ? 'bookmark-outline'
-                : 'heart-outline'
-            }
+            name={selectedTab === 'posts' ? 'map-outline' : 'heart-outline'}
             size={64}
             color={Colors.neutral[300]}
           />
           <Text variant="titleMedium" style={styles.emptyTitle}>
-            {selectedTab === 'posts'
-              ? 'まだプランがありません'
-              : selectedTab === 'bookmarks'
-              ? 'ブックマークがありません'
-              : 'いいねした投稿がありません'}
+            {selectedTab === 'posts' ? 'まだプランがありません' : 'いいねした投稿がありません'}
           </Text>
           <Text variant="bodyMedium" style={styles.emptySubtitle}>
             {selectedTab === 'posts'
-              ? '最初の旅行プランを作成してみましょう'
-              : selectedTab === 'bookmarks'
-              ? '気になるプランをブックマークしてみましょう'
-              : '素敵なプランにいいねしてみましょう'}
+              ? 'このユーザーはまだ旅行プランを投稿していません'
+              : 'このユーザーはまだいいねしていません'}
           </Text>
         </View>
       );
@@ -165,9 +113,16 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+        {/* ヘッダー */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backIconButton}>
+            <Ionicons name="arrow-back" size={24} color={Colors.text.primary} />
+          </TouchableOpacity>
+        </View>
+
         {/* ユーザー情報カード */}
         <View style={styles.userCard}>
-          {profile?.avatar_url ? (
+          {profile.avatar_url ? (
             <Image source={{ uri: profile.avatar_url }} style={styles.userAvatarImage} />
           ) : (
             <View style={styles.userAvatar}>
@@ -175,34 +130,35 @@ export default function ProfileScreen() {
             </View>
           )}
           <Text variant="titleLarge" style={styles.userName}>
-            {profile?.full_name || profile?.username || user?.email || 'ユーザー'}
+            {profile.full_name || profile.username || 'ユーザー'}
           </Text>
-          {profile?.username && profile?.full_name && (
+          {profile.username && (
             <Text variant="bodyMedium" style={styles.userHandle}>
               @{profile.username}
             </Text>
           )}
-          {profile?.bio && (
+          {profile.bio && (
             <Text variant="bodyMedium" style={styles.userBio}>
               {profile.bio}
             </Text>
           )}
+
+          {/* フォローボタン */}
           <View style={styles.userActions}>
             <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => router.push('/profile/edit')}
+              style={[styles.followButton, isFollowing && styles.followingButton]}
+              onPress={() => toggleFollow()}
               activeOpacity={0.7}
+              disabled={followLoading}
             >
-              <Ionicons name="create-outline" size={IconSizes.sm} color={Colors.primary[600]} />
-              <Text style={styles.editButtonText}>プロフィール編集</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.logoutButton}
-              onPress={handleLogout}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="log-out-outline" size={IconSizes.sm} color={Colors.error[600]} />
-              <Text style={styles.logoutButtonText}>ログアウト</Text>
+              <Ionicons
+                name={isFollowing ? 'checkmark-outline' : 'person-add-outline'}
+                size={IconSizes.sm}
+                color={isFollowing ? Colors.text.inverse : Colors.primary[600]}
+              />
+              <Text style={[styles.followButtonText, isFollowing && styles.followingButtonText]}>
+                {isFollowing ? 'フォロー中' : 'フォロー'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -213,13 +169,13 @@ export default function ProfileScreen() {
             <View style={[styles.statIconContainer, { backgroundColor: Colors.primary[50] }]}>
               <Ionicons name="map" size={IconSizes.md} color={Colors.primary[600]} />
             </View>
-            <Text style={styles.statValue}>{myTrips?.length || 0}</Text>
-            <Text style={styles.statLabel}>作成したプラン</Text>
+            <Text style={styles.statValue}>{userTrips?.length || 0}</Text>
+            <Text style={styles.statLabel}>投稿</Text>
           </View>
 
           <TouchableOpacity
             style={styles.statCard}
-            onPress={() => router.push(`/followers/${user?.id}` as any)}
+            onPress={() => router.push(`/followers/${userId}` as any)}
             activeOpacity={0.7}
           >
             <View style={[styles.statIconContainer, { backgroundColor: '#DBEAFE' }]}>
@@ -231,7 +187,7 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={styles.statCard}
-            onPress={() => router.push(`/following/${user?.id}` as any)}
+            onPress={() => router.push(`/following/${userId}` as any)}
             activeOpacity={0.7}
           >
             <View style={[styles.statIconContainer, { backgroundColor: '#FCE7F3' }]}>
@@ -260,7 +216,7 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* タブ */}
+        {/* タブ（投稿といいねのみ） */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity
             style={[styles.tab, selectedTab === 'posts' && styles.tabActive]}
@@ -277,27 +233,7 @@ export default function ProfileScreen() {
             </Text>
             <View style={[styles.tabBadge, selectedTab === 'posts' && styles.tabBadgeActive]}>
               <Text style={[styles.tabBadgeText, selectedTab === 'posts' && styles.tabBadgeTextActive]}>
-                {myTrips?.length || 0}
-              </Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.tab, selectedTab === 'bookmarks' && styles.tabActive]}
-            onPress={() => setSelectedTab('bookmarks')}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name="bookmark"
-              size={IconSizes.sm}
-              color={selectedTab === 'bookmarks' ? Colors.primary[600] : Colors.text.tertiary}
-            />
-            <Text style={[styles.tabText, selectedTab === 'bookmarks' && styles.tabTextActive]}>
-              ブックマーク
-            </Text>
-            <View style={[styles.tabBadge, selectedTab === 'bookmarks' && styles.tabBadgeActive]}>
-              <Text style={[styles.tabBadgeText, selectedTab === 'bookmarks' && styles.tabBadgeTextActive]}>
-                {bookmarks.length}
+                {userTrips?.length || 0}
               </Text>
             </View>
           </TouchableOpacity>
@@ -339,94 +275,45 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing['4xl'],
   },
 
-  // 未認証時のスタイル
-  unauthContent: {
-    flex: 1,
-    padding: Spacing.lg,
-    paddingTop: Spacing['5xl'],
-  },
-  loginPrompt: {
-    backgroundColor: Colors.background.primary,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing['3xl'],
-    alignItems: 'center',
-    ...Shadows.lg,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
-  },
-  loginIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: BorderRadius.full,
-    backgroundColor: Colors.primary[50],
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Spacing['2xl'],
-    ...Shadows.md,
-  },
-  loginTitle: {
-    fontWeight: Typography.fontWeight.bold,
-    color: Colors.text.primary,
-    marginBottom: Spacing.md,
-    textAlign: 'center',
-  },
-  loginSubtitle: {
-    color: Colors.text.secondary,
-    textAlign: 'center',
-    marginBottom: Spacing['3xl'],
-    lineHeight: Typography.fontSize.lg * Typography.lineHeight.relaxed,
-  },
-  features: {
-    width: '100%',
-    marginBottom: Spacing['3xl'],
-    gap: Spacing.lg,
-  },
-  featureItem: {
+  // ヘッダー
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.background.secondary,
     padding: Spacing.lg,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border.light,
+    backgroundColor: Colors.background.primary,
   },
-  featureIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.primary[50],
+  backIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.full,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: Spacing.md,
-  },
-  featureTextContainer: {
-    flex: 1,
-  },
-  featureTitle: {
-    fontSize: Typography.fontSize.base,
-    fontWeight: Typography.fontWeight.semibold,
-    color: Colors.text.primary,
-    marginBottom: 2,
-  },
-  featureDescription: {
-    fontSize: Typography.fontSize.sm,
-    color: Colors.text.tertiary,
-  },
-  loginButton: {
-    width: '100%',
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.primary[500],
-    ...Shadows.md,
-  },
-  loginButtonContent: {
-    paddingVertical: Spacing.sm,
-  },
-  loginButtonLabel: {
-    fontSize: Typography.fontSize.base,
-    fontWeight: Typography.fontWeight.semibold,
+    backgroundColor: Colors.background.secondary,
   },
 
-  // 認証済みのスタイル
+  // エラー状態
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing['4xl'],
+  },
+  errorTitle: {
+    fontWeight: Typography.fontWeight.bold,
+    color: Colors.text.primary,
+    marginTop: Spacing.lg,
+    marginBottom: Spacing.xs,
+  },
+  errorSubtitle: {
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  backButton: {
+    marginTop: Spacing.lg,
+  },
+
+  // ユーザー情報カード
   userCard: {
     backgroundColor: Colors.background.primary,
     borderRadius: BorderRadius.xl,
@@ -472,16 +359,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: Spacing.md,
   },
-  userId: {
-    color: Colors.text.tertiary,
-    marginBottom: Spacing.xl,
-    textAlign: 'center',
-  },
   userActions: {
     flexDirection: 'row',
     gap: Spacing.md,
   },
-  editButton: {
+  followButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
@@ -492,26 +374,20 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary[500],
     backgroundColor: Colors.primary[50],
   },
-  editButtonText: {
+  followingButton: {
+    backgroundColor: Colors.primary[500],
+    borderColor: Colors.primary[500],
+  },
+  followButtonText: {
     fontSize: Typography.fontSize.base,
     fontWeight: Typography.fontWeight.semibold,
     color: Colors.primary[600],
   },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
-    borderWidth: 1.5,
-    borderColor: Colors.error[500],
+  followingButtonText: {
+    color: Colors.text.inverse,
   },
-  logoutButtonText: {
-    fontSize: Typography.fontSize.base,
-    fontWeight: Typography.fontWeight.semibold,
-    color: Colors.error[600],
-  },
+
+  // 統計カード
   statsGrid: {
     flexDirection: 'row',
     gap: Spacing.md,

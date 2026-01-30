@@ -15,11 +15,12 @@ interface CommentListProps {
       avatar_url: string | null;
     };
   }>;
+  onEditComment?: (commentId: string, content: string) => void;
   onDeleteComment?: (commentId: string) => void;
   isLoading?: boolean;
 }
 
-export function CommentList({ comments, onDeleteComment, isLoading }: CommentListProps) {
+export function CommentList({ comments, onEditComment, onDeleteComment, isLoading }: CommentListProps) {
   if (isLoading) {
     return (
       <View style={styles.emptyContainer}>
@@ -41,7 +42,7 @@ export function CommentList({ comments, onDeleteComment, isLoading }: CommentLis
       data={comments}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
-        <CommentItem comment={item} onDelete={onDeleteComment} />
+        <CommentItem comment={item} onEdit={onEditComment} onDelete={onDeleteComment} />
       )}
       ItemSeparatorComponent={() => <Divider />}
       style={styles.list}

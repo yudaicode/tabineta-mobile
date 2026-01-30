@@ -7,6 +7,9 @@ import {
   deleteTrip,
   searchTrips,
   createTripWithSchedule,
+  copyTripSchedule,
+  updateActivity,
+  reorderActivities,
   FetchTripsParams,
   CreateTripWithScheduleData,
 } from '@/lib/api';
@@ -83,6 +86,83 @@ export function useDeleteTrip() {
 }
 
 /**
+ * アクティビティを更新するフック
+ */
+export function useUpdateActivity() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      activityId,
+      tripScheduleId,
+      data,
+    }: {
+      activityId: string;
+      tripScheduleId: string;
+      data: {
+        time?: string;
+        title?: string;
+        type?: string;
+        location?: string | null;
+        description?: string | null;
+        duration?: string | null;
+        cost?: number | null;
+      };
+    }) => updateActivity(activityId, data),
+    onSuccess: (_, variables) => {
+      // 旅行詳細のキャッシュを無効化して再取得
+      queryClient.invalidateQueries({ queryKey: ['trip-detail', variables.tripScheduleId] });
+      queryClient.invalidateQueries({ queryKey: ['trips', variables.tripScheduleId] });
+      Toast.show({
+        type: 'success',
+        text1: 'アクティビティを更新しました',
+      });
+    },
+    onError: (error: any) => {
+      Toast.show({
+        type: 'error',
+        text1: '更新に失敗しました',
+        text2: error.message,
+      });
+    },
+  });
+}
+
+/**
+ * アクティビティの順序を変更するフック
+ */
+export function useReorderActivities() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      dayScheduleId,
+      tripScheduleId,
+      activityIds,
+    }: {
+      dayScheduleId: string;
+      tripScheduleId: string;
+      activityIds: string[];
+    }) => reorderActivities(dayScheduleId, activityIds),
+    onSuccess: (_, variables) => {
+      // 旅行詳細のキャッシュを無効化して再取得
+      queryClient.invalidateQueries({ queryKey: ['trip-detail', variables.tripScheduleId] });
+      Toast.show({
+        type: 'success',
+        text1: 'アクティビティの順序を変更しました',
+      });
+    },
+    onError: (error: any) => {
+      Toast.show({
+        type: 'error',
+        text1: '順序変更に失敗しました',
+        text2: error.message,
+      });
+    },
+  });
+}
+
+/**
  * 旅行プランを検索するフック
  */
 export function useSearchTrips(query: string, params: FetchTripsParams = {}) {
@@ -113,6 +193,41 @@ export function useCreateTripWithSchedule() {
       Toast.show({
         type: 'error',
         text1: '作成に失敗しました',
+        text2: error.message,
+      });
+    },
+  });
+}
+
+/**
+ * 旅行プランをコピーするフック
+ * 画像はプライバシーの観点からコピーされません
+ */
+export function useCopyTripSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      tripScheduleId,
+      userId,
+      options,
+    }: {
+      tripScheduleId: string;
+      userId: string;
+      options?: { title?: string; isPublic?: boolean };
+    }) => copyTripSchedule(tripScheduleId, userId, options),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trips'] });
+      Toast.show({
+        type: 'success',
+        text1: '旅行プランをコピーしました',
+        text2: '「マイページ」から編集できます',
+      });
+    },
+    onError: (error: any) => {
+      Toast.show({
+        type: 'error',
+        text1: 'コピーに失敗しました',
         text2: error.message,
       });
     },

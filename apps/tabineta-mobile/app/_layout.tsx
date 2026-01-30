@@ -3,7 +3,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack, Redirect } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 import { PaperProvider } from 'react-native-paper';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -13,6 +13,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { useAuth } from '@/hooks/useAuth';
 import { queryClient } from '@/lib/queryClient';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { setupNotificationHandlers } from '@/utils/notifications';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -55,6 +56,11 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
   const { isAuthenticated, loading } = useAuth();
 
+  // 通知ハンドラーを初期化
+  useEffect(() => {
+    setupNotificationHandlers();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <PaperProvider>
@@ -62,20 +68,18 @@ function RootLayoutNav() {
           {loading ? (
             <LoadingSpinner message="読み込み中..." />
           ) : (
-            <>
-              <Stack screenOptions={{ headerShown: false }}>
-                {!isAuthenticated ? (
-                  <Stack.Screen name="(auth)" />
-                ) : (
-                  <>
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-                  </>
-                )}
-              </Stack>
-              <Toast />
-            </>
+            <Stack screenOptions={{ headerShown: false }}>
+              {!isAuthenticated ? (
+                <Stack.Screen name="(auth)" />
+              ) : (
+                <>
+                  <Stack.Screen name="(tabs)" />
+                  <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+                </>
+              )}
+            </Stack>
           )}
+          <Toast />
         </ThemeProvider>
       </PaperProvider>
     </QueryClientProvider>

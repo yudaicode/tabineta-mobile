@@ -8,7 +8,8 @@
         "--project-ref=qligfarbbfsbyarihnxw"
       ],
       "env": {
-        "SUPABASE_ACCESS_TOKEN": "sbp_1d3787481ca74e6df2c6e489d00e3395edf42703"
+        "SUPABASE_URL": "https://qligfarbbfsbyarihnxw.supabase.co",
+        "SUPABASE_ACCESS_TOKEN": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsaWdmYXJiYmZzYnlhcmlobnh3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODUxNTI1NSwiZXhwIjoyMDc0MDkxMjU1fQ.Jkeie_yL-nzoQt1rHfAKW214XSGW3LNePhNm4uQnyPU"
       }
     }
   }
