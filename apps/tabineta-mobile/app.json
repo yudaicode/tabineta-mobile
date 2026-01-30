@@ -16,12 +16,13 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tabineta.mobile",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "NSCameraUsageDescription": "旅行の写真を撮影するためにカメラを使用します",
         "NSPhotoLibraryUsageDescription": "旅行記に写真を追加するためにフォトライブラリにアクセスします",
         "NSPhotoLibraryAddUsageDescription": "撮影した写真をフォトライブラリに保存します",
-        "CFBundleAllowMixedLocalizations": true
+        "CFBundleAllowMixedLocalizations": true,
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
